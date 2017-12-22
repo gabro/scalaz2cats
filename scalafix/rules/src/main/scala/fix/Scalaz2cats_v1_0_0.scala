@@ -40,13 +40,13 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
         ctx.replaceTree(t, catsEitherSyntaxImport.syntax)
       case t @ Importee.Name(\/(_) | \/-(_) | -\/(_)) =>
         ctx.removeImportee(t)
-      case t @ Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) =>
-        ctx.addGlobalImport(catsEitherSyntaxImport)
     }.asPatch + ctx.replaceSymbols(
       "scalaz.syntax.EitherOps.left" -> "asLeft",
       "scalaz.syntax.EitherOps.right" -> "asRight",
       "scalaz.`\\/-`" -> "scala.Right",
       "scalaz.`-\\/`" -> "scala.Left"
-    )
+    ) + (if (ctx.tree.collect {
+      case t @ Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) => ()
+    }.length > 0) ctx.addGlobalImport(catsEitherSyntaxImport) else Patch.empty)
   }
 }

@@ -8,6 +8,6 @@ import Scalaz._
 
 object Mylibrary_1_0_Test2 {
   def myMethod(x: Int): String \/ Int =
-    if (x > 2) \/-(x)
+    if (x > 2) x.right
     else "nope".left
 }
