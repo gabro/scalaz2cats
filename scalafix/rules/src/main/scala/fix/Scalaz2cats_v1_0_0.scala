@@ -53,17 +53,27 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
 
 case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(index, "MigrateOptionSyntax") {
   private lazy val scalazOptionSyntaxImport = importer"scalaz.syntax.std.option._"
+  private lazy val scalazOptionImport = importer"scalaz.syntax.option._"
   private lazy val catsOptionSyntaxImport = importer"cats.syntax.option._"
   private lazy val some = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.syntax.std.OptionIdOps.some.")
+  )
+  private lazy val none = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.std.OptionFunctions.none.")
   )
 
   override def fix(ctx: RuleCtx): Patch = {
     ctx.tree.collect {
       case t @ importer"scalaz.syntax.std.option._" =>
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
+      case t @ importer"scalaz.std.option._" =>
+        if (!ctx.tree.contains(scalazOptionSyntaxImport)) ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
+        else ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
+      case t @ importer"scalaz.std.option._" if !ctx.tree.contains(scalazOptionSyntaxImport) =>
+        ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
     }.asPatch + (if (ctx.tree.collect {
-      case t @ Term.Select(_, some(_)) if !ctx.tree.contains(scalazOptionSyntaxImport) => ()
+      case t @ Term.Select(_, some(_) | none (_))
+        if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(scalazOptionImport) => ()
     }.length > 0) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
   }
 }
