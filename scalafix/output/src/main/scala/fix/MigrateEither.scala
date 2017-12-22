@@ -7,6 +7,8 @@ object Mylibrary_1_0_Test {
     if (x > 2) Right(x)
     else "nope".asLeft
 
+  def myMethod2(x: Int): Either[String, Int] = ???
+
   myMethod(43) match {
     case Right(n) => println(n)
     case Left(s) => println(s)

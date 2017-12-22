@@ -11,6 +11,8 @@ object Mylibrary_1_0_Test {
     if (x > 2) \/-(x)
     else "nope".left
 
+  def myMethod2(x: Int): \/[String, Int] = ???
+
   myMethod(43) match {
     case \/-(n) => println(n)
     case -\/(s) => println(s)

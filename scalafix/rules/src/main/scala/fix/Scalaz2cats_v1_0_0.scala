@@ -22,6 +22,8 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
     ctx.tree.collect {
       case t @ Type.ApplyInfix(lhs, \/(_), rhs) =>
         ctx.replaceTree(t, q"Either[$lhs, $rhs]".syntax)
+      case t @ Type.Apply(\/(_), args) =>
+        ctx.replaceTree(t, q"Either[${args(0)}, ${args(1)}]".syntax)
       case t @ importer"scalaz.syntax.either._" =>
         ctx.replaceTree(t, importer"cats.syntax.either._".syntax)
       case t @ Importee.Name(\/(_) | \/-(_) | -\/(_)) =>
