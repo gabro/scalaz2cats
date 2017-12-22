@@ -1,5 +1,8 @@
 /*
-rule = "class:fix.MigrateEither"
+rules = [
+  "class:fix.MigrateEither",
+  "class:fix.RemoveGlobalImports",
+]
 */
 package fix
 

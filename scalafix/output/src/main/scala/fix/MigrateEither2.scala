@@ -1,7 +1,5 @@
 package fix
 
-import scalaz._
-import Scalaz._
 import cats.syntax.either._
 
 object Mylibrary_1_0_Test2 {

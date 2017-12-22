@@ -77,3 +77,14 @@ case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(inde
     }.length > 0) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
   }
 }
+
+case class RemoveGlobalImports(index: SemanticdbIndex) extends SemanticRule(index, "RemoveGlobalImports") {
+  override def fix(ctx: RuleCtx): Patch = {
+    ctx.tree.collect {
+      case t @ importer"scalaz._" =>
+        ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
+      case t @ importer"Scalaz._" =>
+        ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
+    }.asPatch
+  }
+}
