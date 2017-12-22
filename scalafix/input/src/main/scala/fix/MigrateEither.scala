@@ -17,4 +17,9 @@ object Mylibrary_1_0_Test {
     case \/-(n) => println(n)
     case -\/(s) => println(s)
   }
+
+  myMethod2(1) match {
+    case scalaz.\/-(n) => println(n)
+    case scalaz.-\/(s) => println(s)
+  }
 }
