@@ -146,6 +146,8 @@ case class RemoveGlobalImports(index: SemanticdbIndex) extends SemanticRule(inde
         ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
       case t @ importer"Scalaz._" =>
         ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
+      case t @ importer"scalaz.Scalaz._" =>
+        ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
     }.asPatch
   }
 }
