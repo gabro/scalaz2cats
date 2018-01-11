@@ -1,7 +1,8 @@
 package fix
 
 import scalafix._
-import scalafix.util._
+import scalafix.syntax._
+import scalafix.util.SymbolMatcher
 import scala.meta._
 import scala.meta.contrib._
 
@@ -78,12 +79,75 @@ case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(inde
   }
 }
 
+case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(index, "MigrateValidationNel") {
+  private lazy val NonEmptyListScalaz = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.NonEmptyList.")
+  )
+
+  // blame scalaz/core/src/main/scala/scalaz/syntax/ApplicativeBuilder.scala for this
+  private[this] val cartesianBuilders = SymbolMatcher.normalized((
+    "_root_.scalaz.syntax.ApplyOps.`|@|`." ::
+    "_root_.scalaz.syntax.ApplicativeBuilder.`|@|`." ::
+      (3 to 12).map { i: Int =>
+        val post = (3 to i).map { j => s"ApplicativeBuilder$j" }.mkString(".")
+        s"_root_.scalaz.syntax.ApplicativeBuilder.$post.`|@|`."
+    }.toList).map(Symbol.apply): _*)
+
+  private[this] def replaceOpWithComma(ctx: RuleCtx, op: Term.Name): Patch =
+    // replace |@| with ,
+    ctx.replaceTree(op, ",") ++
+      // remove the space before |@|
+      ctx.tokenList
+        .leading(op.tokens.head)
+        .takeWhile(_.is[Whitespace])
+        .map(ctx.removeToken)
+
+  override def fix(ctx: RuleCtx): Patch = {
+    ctx.replaceSymbols(
+      "scalaz.ValidationNel" -> "cats.data.ValidatedNel",
+      "scalaz.Success" -> "cats.data.Validated.Valid",
+      "scalaz.Failure" -> "cats.data.Validated.Invalid",
+      "scalaz.syntax.ValidationOps.successNel" -> "validNel",
+      "scalaz.syntax.ValidationOps.failureNel" -> "invalidNel"
+    ) + ctx.tree.collect {
+      case t @ importer"scalaz.syntax.validation._" =>
+        ctx.replaceTree(t, importer"cats.syntax.validated._".syntax)
+      case t @ importer"scalaz.syntax.apply._" =>
+        ctx.replaceTree(t, importer"cats.syntax.apply._".syntax)
+      case t @ importer"scalaz.{..$ips}" =>
+        ips.collect {
+          case NonEmptyListScalaz(i: Importee) =>
+            ctx.removeImportee(i) + ctx.addGlobalImport(importer"cats.data.NonEmptyList")
+        }.asPatch
+      case Term.ApplyInfix(_, cartesianBuilders(op: Term.Name), _, _) =>
+        replaceOpWithComma(ctx, op)
+      case Term.Apply(t @ Term.ApplyInfix(_, cartesianBuilders(_), _, _), _) =>
+        ctx.addRight(t, ".mapN")
+      case Term.Apply(NonEmptyListScalaz(t), _) =>
+        val x = ctx.tokenList.next(t.tokens.last)
+        ctx.addRight(t, ".of")
+    }.asPatch
+  }
+}
+
+case class MigrateValidation(index: SemanticdbIndex) extends SemanticRule(index, "MigrateValidation") {
+  override def fix(ctx: RuleCtx): Patch = {
+    ctx.replaceSymbols(
+      "scalaz.Validation" -> "cats.data.Validated",
+      "scalaz.Success" -> "cats.data.Validated.Valid",
+      "scalaz.Failure" -> "cats.data.Validated.Invalid"
+    )
+  }
+}
+
 case class RemoveGlobalImports(index: SemanticdbIndex) extends SemanticRule(index, "RemoveGlobalImports") {
   override def fix(ctx: RuleCtx): Patch = {
     ctx.tree.collect {
       case t @ importer"scalaz._" =>
         ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
       case t @ importer"Scalaz._" =>
+        ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
+      case t @ importer"scalaz.Scalaz._" =>
         ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
     }.asPatch
   }
