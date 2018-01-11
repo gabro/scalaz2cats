@@ -114,10 +114,11 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
         ctx.replaceTree(t, importer"cats.syntax.validated._".syntax)
       case t @ importer"scalaz.syntax.apply._" =>
         ctx.replaceTree(t, importer"cats.syntax.apply._".syntax)
-      case t @ importer"scalaz.{..$ips}" if ips.collect { case i: Importee.Name =>
-        i.name.value }.contains("NonEmptyList") =>
-        ctx.removeImportee(ips.collect { case i: Importee.Name if i.name.value == "NonEmptyList" => i }.head) +
-        ctx.addGlobalImport(importer"cats.data.NonEmptyList")
+      case t @ importer"scalaz.{..$ips}" =>
+        ips.collect {
+          case NonEmptyListScalaz(i: Importee) =>
+            ctx.removeImportee(i) + ctx.addGlobalImport(importer"cats.data.NonEmptyList")
+        }.asPatch
       case Term.ApplyInfix(_, cartesianBuilders(op: Term.Name), _, _) =>
         replaceOpWithComma(ctx, op)
       case Term.Apply(t @ Term.ApplyInfix(_, cartesianBuilders(_), _, _), _) =>
