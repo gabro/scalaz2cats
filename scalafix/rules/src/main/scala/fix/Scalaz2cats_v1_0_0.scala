@@ -73,7 +73,7 @@ case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(inde
       case t @ importer"scalaz.std.option._" if !ctx.tree.contains(scalazOptionSyntaxImport) =>
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
     }.asPatch + (if (ctx.tree.collect {
-      case t @ Term.Select(_, some(_) | none (_))
+      case t @ Term.Select(_, some(_) | none(_))
         if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(scalazOptionImport) => ()
     }.length > 0) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
   }
@@ -83,6 +83,15 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
   private lazy val NonEmptyListScalaz = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.NonEmptyList.")
   )
+  private lazy val successNel = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.ValidationOps.successNel.")
+  )
+  private lazy val failureNel = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.ValidationOps.failureNel.")
+  )
+
+  private lazy val scalazValidationSyntaxImport = importer"scalaz.syntax.validation._"
+  private lazy val catsValidatedSyntaxImport = importer"cats.syntax.validated._"
 
   // blame scalaz/core/src/main/scala/scalaz/syntax/ApplicativeBuilder.scala for this
   private[this] val cartesianBuilders = SymbolMatcher.normalized((
@@ -126,7 +135,10 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
       case Term.Apply(NonEmptyListScalaz(t), _) =>
         val x = ctx.tokenList.next(t.tokens.last)
         ctx.addRight(t, ".of")
-    }.asPatch
+    }.asPatch + (if (ctx.tree.collect {
+      case t @ Term.Select(_, successNel(_) | failureNel(_))
+        if !ctx.tree.contains(scalazValidationSyntaxImport) => ()
+    }.length > 0) ctx.addGlobalImport(catsValidatedSyntaxImport) else Patch.empty)
   }
 }
 
