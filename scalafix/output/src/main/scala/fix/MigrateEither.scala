@@ -18,4 +18,6 @@ object Mylibrary_1_0_Test {
     case scala.Right(n) => println(n)
     case scala.Left(s) => println(s)
   }
+
+  myMethod2(1) getOrElse 0
 }

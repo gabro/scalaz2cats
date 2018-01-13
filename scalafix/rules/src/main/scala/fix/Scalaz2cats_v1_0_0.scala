@@ -44,6 +44,7 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
     }.asPatch + ctx.replaceSymbols(
       "scalaz.syntax.EitherOps.left" -> "asLeft",
       "scalaz.syntax.EitherOps.right" -> "asRight",
+      "scalaz.`\\/`.`|`" -> "getOrElse",
       "scalaz.`\\/-`" -> "scala.Right",
       "scalaz.`-\\/`" -> "scala.Left"
     ) + (if (ctx.tree.collect {
@@ -72,7 +73,9 @@ case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(inde
         else ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
       case t @ importer"scalaz.std.option._" if !ctx.tree.contains(scalazOptionSyntaxImport) =>
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
-    }.asPatch + (if (ctx.tree.collect {
+    }.asPatch + ctx.replaceSymbols(
+      "scalaz.syntax.std.OptionOps.`|`" -> "getOrElse"
+    ) + (if (ctx.tree.collect {
       case Term.Select(_, some(_) | none(_))
         if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(scalazOptionImport) => ()
     }.nonEmpty) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
@@ -102,16 +105,16 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
         s"_root_.scalaz.syntax.ApplicativeBuilder.$post.`|@|`."
     }.toList).map(Symbol.apply): _*)
 
-  private[this] val cartesianAppliesRenames: Map[String, String] = (3 to 12).flatMap { arity =>
+  private[this] val cartesianAppliesRenames: Map[String, String] = {
     val applicativeArityBuilders = (3 to 12).map { i: Int =>
       val post = (3 to i).map { j => s"ApplicativeBuilder$j" }.mkString(".")
       s"_root_.scalaz.syntax.ApplicativeBuilder.$post.apply." -> "mapN"
     }.toList
 
-    Seq(
+    (Seq(
       s"_root_.scalaz.syntax.ApplicativeBuilder.apply." -> "mapN"
-    ) ++ applicativeArityBuilders
-  }.toMap
+    ) ++ applicativeArityBuilders).toMap
+  }
 
   private[this] val cartesianOps =
     SymbolMatcher.normalized(cartesianAppliesRenames.keys.map(Symbol.apply).toSeq: _*)
