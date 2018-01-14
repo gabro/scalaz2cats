@@ -35,8 +35,8 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
     ctx.tree.collect {
       case t @ Type.ApplyInfix(lhs, \/(_), rhs) =>
         ctx.replaceTree(t, q"Either[$lhs, $rhs]".syntax)
-      case t @ Type.Apply(\/(_), args) =>
-        ctx.replaceTree(t, q"Either[${args(0)}, ${args(1)}]".syntax)
+      case t @ Type.Apply(\/(_), List(rtpe, ltpe)) =>
+        ctx.replaceTree(t, q"Either[$rtpe, $ltpe]".syntax)
       case t @ importer"scalaz.syntax.either._" =>
         ctx.replaceTree(t, catsEitherSyntaxImport.syntax)
       case t @ Importee.Name(\/(_) | \/-(_) | -\/(_)) =>
@@ -47,8 +47,8 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
       "scalaz.`\\/-`" -> "scala.Right",
       "scalaz.`-\\/`" -> "scala.Left"
     ) + (if (ctx.tree.collect {
-      case t @ Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) => ()
-    }.length > 0) ctx.addGlobalImport(catsEitherSyntaxImport) else Patch.empty)
+      case Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) => ()
+    }.nonEmpty) ctx.addGlobalImport(catsEitherSyntaxImport) else Patch.empty)
   }
 }
 
@@ -73,9 +73,9 @@ case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(inde
       case t @ importer"scalaz.std.option._" if !ctx.tree.contains(scalazOptionSyntaxImport) =>
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
     }.asPatch + (if (ctx.tree.collect {
-      case t @ Term.Select(_, some(_) | none(_))
+      case Term.Select(_, some(_) | none(_))
         if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(scalazOptionImport) => ()
-    }.length > 0) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
+    }.nonEmpty) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
   }
 }
 
@@ -102,6 +102,20 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
         s"_root_.scalaz.syntax.ApplicativeBuilder.$post.`|@|`."
     }.toList).map(Symbol.apply): _*)
 
+  private[this] val cartesianAppliesRenames: Map[String, String] = (3 to 12).flatMap { arity =>
+    val applicativeArityBuilders = (3 to 12).map { i: Int =>
+      val post = (3 to i).map { j => s"ApplicativeBuilder$j" }.mkString(".")
+      s"_root_.scalaz.syntax.ApplicativeBuilder.$post.apply." -> "mapN"
+    }.toList
+
+    Seq(
+      s"_root_.scalaz.syntax.ApplicativeBuilder.apply." -> "mapN"
+    ) ++ applicativeArityBuilders
+  }.toMap
+
+  private[this] val cartesianOps =
+    SymbolMatcher.normalized(cartesianAppliesRenames.keys.map(Symbol.apply).toSeq: _*)
+
   private[this] def replaceOpWithComma(ctx: RuleCtx, op: Term.Name): Patch =
     // replace |@| with ,
     ctx.replaceTree(op, ",") ++
@@ -123,23 +137,35 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
         ctx.replaceTree(t, importer"cats.syntax.validated._".syntax)
       case t @ importer"scalaz.syntax.apply._" =>
         ctx.replaceTree(t, importer"cats.syntax.apply._".syntax)
-      case t @ importer"scalaz.{..$ips}" =>
+      case importer"scalaz.{..$ips}" =>
         ips.collect {
           case NonEmptyListScalaz(i: Importee) =>
             ctx.removeImportee(i) + ctx.addGlobalImport(importer"cats.data.NonEmptyList")
         }.asPatch
       case Term.ApplyInfix(_, cartesianBuilders(op: Term.Name), _, _) =>
         replaceOpWithComma(ctx, op)
+      case Term.ApplyInfix(lhs, cartesianOps(_), _, _) =>
+        wrapInParensIfNeeded(ctx, lhs)
       case Term.Apply(t @ Term.ApplyInfix(_, cartesianBuilders(_), _, _), _) =>
         ctx.addRight(t, ".mapN")
       case Term.Apply(NonEmptyListScalaz(t), _) =>
-        val x = ctx.tokenList.next(t.tokens.last)
         ctx.addRight(t, ".of")
-    }.asPatch + (if (ctx.tree.collect {
-      case t @ Term.Select(_, successNel(_) | failureNel(_))
+    }.asPatch + ctx.replaceSymbols(cartesianAppliesRenames.toSeq: _*) + (if (ctx.tree.collect {
+      case Term.Select(_, successNel(_) | failureNel(_))
         if !ctx.tree.contains(scalazValidationSyntaxImport) => ()
-    }.length > 0) ctx.addGlobalImport(catsValidatedSyntaxImport) else Patch.empty)
+    }.nonEmpty) ctx.addGlobalImport(catsValidatedSyntaxImport) else Patch.empty)
   }
+
+  private[this] def wrapInParensIfNeeded(ctx: RuleCtx, t: Term): Patch = {
+    for {
+      head <- t.tokens.headOption
+      if !head.is[Token.LeftParen]
+      last <- t.tokens.lastOption
+      if !last.is[Token.RightParen]
+    } yield
+      ctx.addLeft(head, "(") +
+        ctx.addRight(last, ")")
+  }.asPatch
 }
 
 case class MigrateValidation(index: SemanticdbIndex) extends SemanticRule(index, "MigrateValidation") {

@@ -8,11 +8,11 @@ lazy val rules = project.settings(
 
 lazy val input = project.settings(
   scalafixSourceroot := sourceDirectory.in(Compile).value,
-  libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.15"
+  libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.18"
 )
 
 lazy val output = project.settings(
-  libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.0-MF"
+  libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.1"
 )
 
 lazy val tests = project
