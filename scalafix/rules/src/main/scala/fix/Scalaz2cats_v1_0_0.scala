@@ -48,12 +48,16 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
       "scalaz.`\\/-`" -> "scala.Right",
       "scalaz.`-\\/`" -> "scala.Left"
     ) + (if (ctx.tree.collect {
-      case Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) => ()
-    }.nonEmpty) ctx.addGlobalImport(catsEitherSyntaxImport) else Patch.empty)
+             case Term.Select(_, left(_) | right(_))
+                 if !ctx.tree.contains(scalazEitherSyntaxImport) =>
+               ()
+           }.nonEmpty) ctx.addGlobalImport(catsEitherSyntaxImport)
+         else Patch.empty)
   }
 }
 
-case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(index, "MigrateOptionSyntax") {
+case class MigrateOptionSyntax(index: SemanticdbIndex)
+    extends SemanticRule(index, "MigrateOptionSyntax") {
   private lazy val scalazOptionSyntaxImport = importer"scalaz.syntax.std.option._"
   private lazy val scalazOptionImport = importer"scalaz.syntax.option._"
   private lazy val catsOptionSyntaxImport = importer"cats.syntax.option._"
@@ -69,20 +73,26 @@ case class MigrateOptionSyntax(index: SemanticdbIndex) extends SemanticRule(inde
       case t @ importer"scalaz.syntax.std.option._" =>
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
       case t @ importer"scalaz.std.option._" =>
-        if (!ctx.tree.contains(scalazOptionSyntaxImport)) ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
+        if (!ctx.tree.contains(scalazOptionSyntaxImport))
+          ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
         else ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
       case t @ importer"scalaz.std.option._" if !ctx.tree.contains(scalazOptionSyntaxImport) =>
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
     }.asPatch + ctx.replaceSymbols(
       "scalaz.syntax.std.OptionOps.`|`" -> "getOrElse"
     ) + (if (ctx.tree.collect {
-      case Term.Select(_, some(_) | none(_))
-        if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(scalazOptionImport) => ()
-    }.nonEmpty) ctx.addGlobalImport(catsOptionSyntaxImport) else Patch.empty)
+             case Term.Select(_, some(_) | none(_))
+                 if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(
+                   scalazOptionImport
+                 ) =>
+               ()
+           }.nonEmpty) ctx.addGlobalImport(catsOptionSyntaxImport)
+         else Patch.empty)
   }
 }
 
-case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(index, "MigrateValidationNel") {
+case class MigrateValidationNel(index: SemanticdbIndex)
+    extends SemanticRule(index, "MigrateValidationNel") {
   private lazy val NonEmptyListScalaz = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.NonEmptyList.")
   )
@@ -97,17 +107,26 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
   private lazy val catsValidatedSyntaxImport = importer"cats.syntax.validated._"
 
   // blame scalaz/core/src/main/scala/scalaz/syntax/ApplicativeBuilder.scala for this
-  private[this] val cartesianBuilders = SymbolMatcher.normalized((
-    "_root_.scalaz.syntax.ApplyOps.`|@|`." ::
-    "_root_.scalaz.syntax.ApplicativeBuilder.`|@|`." ::
+  private[this] val cartesianBuilders = SymbolMatcher.normalized(
+    ("_root_.scalaz.syntax.ApplyOps.`|@|`." ::
+      "_root_.scalaz.syntax.ApplicativeBuilder.`|@|`." ::
       (3 to 12).map { i: Int =>
-        val post = (3 to i).map { j => s"ApplicativeBuilder$j" }.mkString(".")
-        s"_root_.scalaz.syntax.ApplicativeBuilder.$post.`|@|`."
-    }.toList).map(Symbol.apply): _*)
+      val post = (3 to i)
+        .map { j =>
+          s"ApplicativeBuilder$j"
+        }
+        .mkString(".")
+      s"_root_.scalaz.syntax.ApplicativeBuilder.$post.`|@|`."
+    }.toList).map(Symbol.apply): _*
+  )
 
   private[this] val cartesianAppliesRenames: Map[String, String] = {
     val applicativeArityBuilders = (3 to 12).map { i: Int =>
-      val post = (3 to i).map { j => s"ApplicativeBuilder$j" }.mkString(".")
+      val post = (3 to i)
+        .map { j =>
+          s"ApplicativeBuilder$j"
+        }
+        .mkString(".")
       s"_root_.scalaz.syntax.ApplicativeBuilder.$post.apply." -> "mapN"
     }.toList
 
@@ -127,6 +146,16 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
         .leading(op.tokens.head)
         .takeWhile(_.is[Whitespace])
         .map(ctx.removeToken)
+
+  private def addValidatedSyntaxImportIfNeeded(ctx: RuleCtx): Patch =
+    ctx.tree
+      .collectFirst {
+        case Term.Select(_, successNel(_) | failureNel(_))
+            if !ctx.tree.contains(scalazValidationSyntaxImport) =>
+          ()
+      }
+      .map(_ => ctx.addGlobalImport(catsValidatedSyntaxImport))
+      .asPatch
 
   override def fix(ctx: RuleCtx): Patch = {
     ctx.replaceSymbols(
@@ -153,10 +182,9 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
         ctx.addRight(t, ".mapN")
       case Term.Apply(NonEmptyListScalaz(t), _) =>
         ctx.addRight(t, ".of")
-    }.asPatch + ctx.replaceSymbols(cartesianAppliesRenames.toSeq: _*) + (if (ctx.tree.collect {
-      case Term.Select(_, successNel(_) | failureNel(_))
-        if !ctx.tree.contains(scalazValidationSyntaxImport) => ()
-    }.nonEmpty) ctx.addGlobalImport(catsValidatedSyntaxImport) else Patch.empty)
+    }.asPatch +
+      ctx.replaceSymbols(cartesianAppliesRenames.toSeq: _*) +
+      addValidatedSyntaxImportIfNeeded(ctx)
   }
 
   private[this] def wrapInParensIfNeeded(ctx: RuleCtx, t: Term): Patch = {
@@ -171,7 +199,8 @@ case class MigrateValidationNel(index: SemanticdbIndex) extends SemanticRule(ind
   }.asPatch
 }
 
-case class MigrateValidation(index: SemanticdbIndex) extends SemanticRule(index, "MigrateValidation") {
+case class MigrateValidation(index: SemanticdbIndex)
+    extends SemanticRule(index, "MigrateValidation") {
   override def fix(ctx: RuleCtx): Patch = {
     ctx.replaceSymbols(
       "scalaz.Validation" -> "cats.data.Validated",
@@ -181,7 +210,8 @@ case class MigrateValidation(index: SemanticdbIndex) extends SemanticRule(index,
   }
 }
 
-case class RemoveGlobalImports(index: SemanticdbIndex) extends SemanticRule(index, "RemoveGlobalImports") {
+case class RemoveGlobalImports(index: SemanticdbIndex)
+    extends SemanticRule(index, "RemoveGlobalImports") {
   override def fix(ctx: RuleCtx): Patch = {
     ctx.tree.collect {
       case t @ importer"scalaz._" =>
