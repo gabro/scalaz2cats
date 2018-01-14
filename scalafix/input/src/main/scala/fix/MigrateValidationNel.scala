@@ -38,6 +38,13 @@ object ValidationNel_1_0_Test {
                 r2: ValidationNel[String, Int]): ValidationNel[String, Int] =
     r1 |@| r2 |@| r2 |@| r1 |@| r1 apply ((b1, b2, _, _, _) => b1 + b2)
 
+  def myMethod7(r1: ValidationNel[String, Int],
+                r2: ValidationNel[String, Int]): ValidationNel[String, Int] =
+    r1 |@| r2 apply f2
+
+
+  def f2(str1: Int, str2: Int): Int = str1 + str2
+
   myMethod(43) match {
     case Success(n) => println(n)
     case Failure(s) => println(s)
