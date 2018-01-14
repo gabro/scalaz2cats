@@ -1,0 +1,16 @@
+language: scala
+
+jdk: oraclejdk8
+
+env:
+  matrix:
+    - CI_TEST
+
+script:
+  - cd scalafix
+  - sbt tests/test
+
+cache:
+  directories:
+    - $HOME/.ivy2/cache
+    - $HOME/.sbt
