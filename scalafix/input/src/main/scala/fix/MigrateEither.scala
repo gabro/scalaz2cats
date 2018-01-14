@@ -22,4 +22,6 @@ object Mylibrary_1_0_Test {
     case scalaz.\/-(n) => println(n)
     case scalaz.-\/(s) => println(s)
   }
+
+  myMethod2(1) | 0
 }
