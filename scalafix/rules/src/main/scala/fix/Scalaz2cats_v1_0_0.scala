@@ -47,12 +47,10 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
       "scalaz.`\\/`.`|`" -> "getOrElse",
       "scalaz.`\\/-`" -> "scala.Right",
       "scalaz.`-\\/`" -> "scala.Left"
-    ) + (if (ctx.tree.collect {
-             case Term.Select(_, left(_) | right(_))
-                 if !ctx.tree.contains(scalazEitherSyntaxImport) =>
-               ()
-           }.nonEmpty) ctx.addGlobalImport(catsEitherSyntaxImport)
-         else Patch.empty)
+    ) + ScalafixUtils.addImportsIfNeeded(ctx) {
+      case Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) =>
+        catsEitherSyntaxImport
+    }
   }
 }
 
@@ -80,14 +78,12 @@ case class MigrateOptionSyntax(index: SemanticdbIndex)
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
     }.asPatch + ctx.replaceSymbols(
       "scalaz.syntax.std.OptionOps.`|`" -> "getOrElse"
-    ) + (if (ctx.tree.collect {
-             case Term.Select(_, some(_) | none(_))
-                 if !ctx.tree.contains(scalazOptionSyntaxImport) && !ctx.tree.contains(
-                   scalazOptionImport
-                 ) =>
-               ()
-           }.nonEmpty) ctx.addGlobalImport(catsOptionSyntaxImport)
-         else Patch.empty)
+    ) + ScalafixUtils.addImportsIfNeeded(ctx) {
+      case Term.Select(_, some(_) | none(_))
+          if !ctx.tree.contains(scalazOptionSyntaxImport)
+            && !ctx.tree.contains(scalazOptionImport) =>
+        catsOptionSyntaxImport
+    }
   }
 }
 
@@ -148,14 +144,11 @@ case class MigrateValidationNel(index: SemanticdbIndex)
         .map(ctx.removeToken)
 
   private def addValidatedSyntaxImportIfNeeded(ctx: RuleCtx): Patch =
-    ctx.tree
-      .collectFirst {
-        case Term.Select(_, successNel(_) | failureNel(_))
-            if !ctx.tree.contains(scalazValidationSyntaxImport) =>
-          ()
-      }
-      .map(_ => ctx.addGlobalImport(catsValidatedSyntaxImport))
-      .asPatch
+    ScalafixUtils.addImportsIfNeeded(ctx) {
+      case Term.Select(_, successNel(_) | failureNel(_))
+          if !ctx.tree.contains(scalazValidationSyntaxImport) =>
+        catsValidatedSyntaxImport
+    }
 
   override def fix(ctx: RuleCtx): Patch = {
     ctx.replaceSymbols(
@@ -221,5 +214,80 @@ case class RemoveGlobalImports(index: SemanticdbIndex)
       case t @ importer"scalaz.Scalaz._" =>
         ctx.removeImportee(t.asInstanceOf[Importer].importees.head)
     }.asPatch
+  }
+}
+
+case class MigrateEqual(index: SemanticdbIndex) extends SemanticRule(index, "MigrateEqual") {
+
+  private lazy val scalazEqualSyntaxImport = importer"scalaz.syntax.equal._"
+  private lazy val scalazEqualImport = importer"scalaz.Equal"
+  private lazy val catsEqualSyntaxImport = importer"cats.syntax.eq._"
+  private lazy val catsEqualImport = importer"cats.Eq"
+
+  private lazy val Equal = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.Equal.")
+  )
+
+  private lazy val catsEqual = SymbolMatcher.normalized(
+    Symbol("_root_.cats.Eq.")
+  )
+
+  private lazy val `===` = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.EqualOps.`===`.")
+  )
+  private lazy val `=/=` = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.EqualOps.`=/=`.")
+  )
+
+  private lazy val `/==` = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.EqualOps.`/==`.")
+  )
+
+  private lazy val `≠` = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.EqualOps.`≠`.")
+  )
+
+  private lazy val `≟` = SymbolMatcher.normalized(
+    Symbol("_root_.scalaz.syntax.EqualOps.`≟`.")
+  )
+
+  override def fix(ctx: RuleCtx): Patch = {
+    val importChecker = ScalafixUtils.addImportsIfNeeded(ctx) _
+
+    ctx.tree.collect {
+      case t @ importer"scalaz.syntax.equal._" =>
+        ctx.replaceTree(t, catsEqualSyntaxImport.syntax)
+      case t @ importer"scalaz.Equal" =>
+        ctx.replaceTree(t, catsEqualImport.syntax)
+      case t @ Type.Apply(Equal(_), List(tpe)) =>
+        ctx.replaceTree(t, q"Eq[$tpe]".syntax)
+      case Term.Select(a @ Equal(_), _) =>
+        ctx.replaceTree(a, "Eq")
+      case Type.Param(_, _, _, _, _, List(a @ Equal(_))) =>
+        ctx.replaceTree(a, "Eq")
+    }.asPatch + ctx.replaceSymbols(
+      "scalaz.syntax.EqualOps.`=/=`" -> "`=!=`",
+      "scalaz.syntax.EqualOps.`/==`" -> "`=!=`",
+      "scalaz.syntax.EqualOps.`≠`" -> "`=!=`",
+      "scalaz.syntax.EqualOps.`≟`" -> "`===`",
+      "scalaz.Equal.equalA" -> "fromUniversalEquals",
+      "scalaz.Equal.equalBy" -> "by",
+      "scalaz.Equal.equal" -> "eqv"
+    ) + importChecker {
+      case Term.ApplyInfix(_, `===`(_) | `=/=`(_) | `/==`(_) | `≠`(_) | `≟`(_), _, _)
+          if !ctx.tree.contains(scalazEqualSyntaxImport) =>
+        catsEqualSyntaxImport
+    } + importChecker {
+      case Term.Select(Equal(_), _) if !ctx.tree.contains(scalazEqualImport) => catsEqualImport
+    }
+  }
+}
+
+object ScalafixUtils {
+  def addImportsIfNeeded(ctx: RuleCtx)(checker: PartialFunction[Tree, Importer]): Patch = {
+    ctx.tree
+      .collectFirst(checker)
+      .map(importer => ctx.addGlobalImport(importer))
+      .asPatch
   }
 }
