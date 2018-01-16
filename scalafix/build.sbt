@@ -12,7 +12,8 @@ lazy val input = project.settings(
 )
 
 lazy val output = project.settings(
-  libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.1"
+  libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.1",
+  libraryDependencies += "org.typelevel" %% "mouse" % "0.16"
 )
 
 lazy val tests = project

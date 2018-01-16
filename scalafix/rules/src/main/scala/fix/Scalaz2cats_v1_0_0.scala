@@ -1,5 +1,6 @@
 package fix
 
+import fix.ScalafixUtils._
 import scalafix._
 import scalafix.syntax._
 import scalafix.util.SymbolMatcher
@@ -47,7 +48,7 @@ case class MigrateEither(index: SemanticdbIndex) extends SemanticRule(index, "Mi
       "scalaz.`\\/`.`|`" -> "getOrElse",
       "scalaz.`\\/-`" -> "scala.Right",
       "scalaz.`-\\/`" -> "scala.Left"
-    ) + ScalafixUtils.addImportsIfNeeded(ctx) {
+    ) + addImportsIfNeeded(ctx) {
       case Term.Select(_, left(_) | right(_)) if !ctx.tree.contains(scalazEitherSyntaxImport) =>
         catsEitherSyntaxImport
     }
@@ -78,7 +79,7 @@ case class MigrateOptionSyntax(index: SemanticdbIndex)
         ctx.replaceTree(t, catsOptionSyntaxImport.syntax)
     }.asPatch + ctx.replaceSymbols(
       "scalaz.syntax.std.OptionOps.`|`" -> "getOrElse"
-    ) + ScalafixUtils.addImportsIfNeeded(ctx) {
+    ) + addImportsIfNeeded(ctx) {
       case Term.Select(_, some(_) | none(_))
           if !ctx.tree.contains(scalazOptionSyntaxImport)
             && !ctx.tree.contains(scalazOptionImport) =>
@@ -134,17 +135,8 @@ case class MigrateValidationNel(index: SemanticdbIndex)
   private[this] val cartesianOps =
     SymbolMatcher.normalized(cartesianAppliesRenames.keys.map(Symbol.apply).toSeq: _*)
 
-  private[this] def replaceOpWithComma(ctx: RuleCtx, op: Term.Name): Patch =
-    // replace |@| with ,
-    ctx.replaceTree(op, ",") ++
-      // remove the space before |@|
-      ctx.tokenList
-        .leading(op.tokens.head)
-        .takeWhile(_.is[Whitespace])
-        .map(ctx.removeToken)
-
   private def addValidatedSyntaxImportIfNeeded(ctx: RuleCtx): Patch =
-    ScalafixUtils.addImportsIfNeeded(ctx) {
+    addImportsIfNeeded(ctx) {
       case Term.Select(_, successNel(_) | failureNel(_))
           if !ctx.tree.contains(scalazValidationSyntaxImport) =>
         catsValidatedSyntaxImport
@@ -180,16 +172,6 @@ case class MigrateValidationNel(index: SemanticdbIndex)
       addValidatedSyntaxImportIfNeeded(ctx)
   }
 
-  private[this] def wrapInParensIfNeeded(ctx: RuleCtx, t: Term): Patch = {
-    for {
-      head <- t.tokens.headOption
-      if !head.is[Token.LeftParen]
-      last <- t.tokens.lastOption
-      if !last.is[Token.RightParen]
-    } yield
-      ctx.addLeft(head, "(") +
-        ctx.addRight(last, ")")
-  }.asPatch
 }
 
 case class MigrateValidation(index: SemanticdbIndex)
@@ -224,35 +206,35 @@ case class MigrateEqual(index: SemanticdbIndex) extends SemanticRule(index, "Mig
   private lazy val catsEqualSyntaxImport = importer"cats.syntax.eq._"
   private lazy val catsEqualImport = importer"cats.Eq"
 
-  private lazy val Equal = SymbolMatcher.normalized(
+  private[this] val Equal = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.Equal.")
   )
 
-  private lazy val catsEqual = SymbolMatcher.normalized(
+  private[this] val catsEqual = SymbolMatcher.normalized(
     Symbol("_root_.cats.Eq.")
   )
 
-  private lazy val `===` = SymbolMatcher.normalized(
+  private[this] val `===` = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.syntax.EqualOps.`===`.")
   )
-  private lazy val `=/=` = SymbolMatcher.normalized(
+  private[this] val `=/=` = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.syntax.EqualOps.`=/=`.")
   )
 
-  private lazy val `/==` = SymbolMatcher.normalized(
+  private[this] val `/==` = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.syntax.EqualOps.`/==`.")
   )
 
-  private lazy val `≠` = SymbolMatcher.normalized(
+  private[this] val `≠` = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.syntax.EqualOps.`≠`.")
   )
 
-  private lazy val `≟` = SymbolMatcher.normalized(
+  private[this] val `≟` = SymbolMatcher.normalized(
     Symbol("_root_.scalaz.syntax.EqualOps.`≟`.")
   )
 
   override def fix(ctx: RuleCtx): Patch = {
-    val importChecker = ScalafixUtils.addImportsIfNeeded(ctx) _
+    val importChecker = addImportsIfNeeded(ctx) _
 
     ctx.tree.collect {
       case t @ importer"scalaz.syntax.equal._" =>
@@ -283,6 +265,61 @@ case class MigrateEqual(index: SemanticdbIndex) extends SemanticRule(index, "Mig
   }
 }
 
+case class MigrateBoolean(index: SemanticdbIndex) extends SemanticRule(index, "MigrateBoolean") {
+  private lazy val scalazBooleanSyntaxImport = importer"scalaz.syntax.std.boolean._"
+  private lazy val catsBooleanSyntaxImport = importer"mouse.boolean._"
+  private[this] val booleanSymbolOr = SymbolMatcher.normalized(
+    Symbol.apply("_root_.scalaz.syntax.std.BooleanOps.`?`.")
+  )
+
+  private[this] val booleanSymbolOrTwo = SymbolMatcher.normalized(
+    Symbol.apply("_root_.scalaz.syntax.std.BooleanOps.Conditional.`|`.")
+  )
+
+  private[this] val booleanEither = SymbolMatcher.normalized(
+    Symbol.apply("_root_.scalaz.syntax.std.BooleanOps.either.")
+  )
+
+  private[this] val booleanEitherOr = SymbolMatcher.normalized(
+    Symbol.apply("_root_.scalaz.syntax.std.BooleanOps.ConditionalEither.or.")
+  )
+
+  // TODO: also need to support a `true.either(12).or("abc")` case
+  override def fix(ctx: RuleCtx): Patch = {
+    ctx.tree.collect {
+      case t @ importer"scalaz.syntax.std.boolean._" =>
+        ctx.replaceTree(t, catsBooleanSyntaxImport.syntax)
+      case Term.ApplyInfix(
+          Term.ApplyInfix(_, booleanSymbolOr(op1: Term.Name), _, List(firstArg)),
+          booleanSymbolOrTwo(op2: Term.Name),
+          _,
+          List(secondArg)
+          ) =>
+        ctx.replaceTree(op1, "fold") +
+          replaceOpWithComma(ctx, op2) +
+          removeWhiteSpacesIfNeeded(ctx, firstArg) +
+          ctx.addLeft(firstArg, "(") +
+          ctx.addRight(secondArg, ")")
+
+      case Term.ApplyInfix(
+          Term.ApplyInfix(_, booleanEither(_), _, List(firstArg)),
+          booleanEitherOr(op2: Term.Name),
+          _,
+          List(secondArg)
+          ) =>
+        replaceOpWithComma(ctx, op2) +
+          removeWhiteSpacesIfNeeded(ctx, firstArg) + ctx.addLeft(firstArg, "(") +
+          ctx.replaceTree(firstArg, secondArg.syntax) + ctx.replaceTree(secondArg, firstArg.syntax) + ctx
+          .addRight(secondArg, ")")
+    }.asPatch + addImportsIfNeeded(ctx) {
+      case Term.ApplyInfix(_, booleanSymbolOr(_) | booleanEither(_), _, _)
+          if !ctx.tree.contains(scalazBooleanSyntaxImport) =>
+        catsBooleanSyntaxImport
+    }
+  }
+
+}
+
 object ScalafixUtils {
   def addImportsIfNeeded(ctx: RuleCtx)(checker: PartialFunction[Tree, Importer]): Patch = {
     ctx.tree
@@ -290,4 +327,26 @@ object ScalafixUtils {
       .map(importer => ctx.addGlobalImport(importer))
       .asPatch
   }
+
+  def replaceOpWithComma(ctx: RuleCtx, op: Term.Name): Patch =
+    ctx.replaceTree(op, ",") + removeWhiteSpacesIfNeeded(ctx, op)
+
+  def removeWhiteSpacesIfNeeded(ctx: RuleCtx, op: Term): Patch = {
+    ctx.tokenList
+      .leading(op.tokens.head)
+      .takeWhile(_.is[Whitespace])
+      .map(ctx.removeToken)
+      .asPatch
+  }
+
+  def wrapInParensIfNeeded(ctx: RuleCtx, t: Term): Patch = {
+    for {
+      head <- t.tokens.headOption
+      if !head.is[Token.LeftParen]
+      last <- t.tokens.lastOption
+      if !last.is[Token.RightParen]
+    } yield
+      ctx.addLeft(head, "(") +
+        ctx.addRight(last, ")")
+  }.asPatch
 }
