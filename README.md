@@ -24,7 +24,7 @@ Otherwise, from the terminal, you can run this
 
 
 ## Contribution guide
-Follow the [guide on the Scalafix website](https://scalacenter.github.io/scalafix/docs/rule-authors/setup).
+Follow the [guide on the Scalafix website](https://scalacenter.github.io/scalafix/docs/developers/setup.html).
 As a quick-start, you can run the tests by doing:
 
 ```bash
