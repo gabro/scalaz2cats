@@ -1,14 +1,8 @@
 package fix
 
-import scala.meta._
-import scalafix._
+import org.scalatest.FunSuiteLike
 import scalafix.testkit._
 
-class Mylibrary_Tests
-  extends SemanticRewriteSuite(
-    SemanticdbIndex.load(Classpath(AbsolutePath(BuildInfo.inputClassdirectory))),
-    AbsolutePath(BuildInfo.inputSourceroot),
-    Seq(AbsolutePath(BuildInfo.outputSourceroot))
-  ) {
+class Mylibrary_Tests extends AbstractSemanticRuleSuite with FunSuiteLike {
   runAllTests()
 }
