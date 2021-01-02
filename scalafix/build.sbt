@@ -12,7 +12,6 @@ inThisBuild(
     )
   )
 )
-)
 
 skip in publish := true
 
