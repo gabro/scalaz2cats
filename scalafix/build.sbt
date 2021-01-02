@@ -3,23 +3,15 @@ inThisBuild(
   List(
     scalaVersion := V.scala212,
     crossScalaVersions := List(V.scala213, V.scala212, V.scala211),
-    organization := "com.example",
-    homepage := Some(url("https://github.com/com/example")),
-    licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
-    developers := List(
-      Developer(
-        "example-username",
-        "Example Full Name",
-        "example@email.com",
-        url("https://example.com")
-      )
-    ),
+    organization := "gabro",
+    homepage := Some(url("https://github.com/gabro/scalaz2cats")),
     addCompilerPlugin(scalafixSemanticdb),
     scalacOptions ++= List(
       "-Yrangepos",
       "-P:semanticdb:synthetics:on"
     )
   )
+)
 )
 
 skip in publish := true
@@ -30,10 +22,13 @@ lazy val rules = project.settings(
 )
 
 lazy val input = project.settings(
+  libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.18",
   skip in publish := true
 )
 
 lazy val output = project.settings(
+  libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.1",
+  libraryDependencies += "org.typelevel" %% "mouse" % "0.16",
   skip in publish := true
 )
 
@@ -52,3 +47,4 @@ lazy val tests = project
   )
   .dependsOn(rules)
   .enablePlugins(ScalafixTestkitPlugin)
+  .enablePlugins(BuildInfoPlugin)
